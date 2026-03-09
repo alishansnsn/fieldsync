@@ -273,14 +273,30 @@ severity must be one of: critical, warning, info. The JSON must be on a single l
         io.to(roomId).emit('ai:stream', { type: 'end' });
 
         const text = fullText.trim();
-        if (text === 'SAFE' || text.startsWith('SAFE')) return null;
+        console.log('[AI RAW]', text);
+
+        if (text === 'SAFE' || text.startsWith('SAFE')) {
+            console.log('[AI] Safe — no alert');
+            return null;
+        }
 
         const dataIdx = text.indexOf('---DATA---');
         const jsonStr = dataIdx !== -1 ? text.slice(dataIdx + 10).trim() : text;
+        console.log('[AI JSON str]', jsonStr.slice(0, 200));
         const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) return null;
+        if (!jsonMatch) {
+            console.log('[AI] No JSON found in response');
+            return null;
+        }
 
-        const alertData = JSON.parse(jsonMatch[0]);
+        let alertData;
+        try {
+            alertData = JSON.parse(jsonMatch[0]);
+        } catch (e) {
+            console.log('[AI] JSON parse failed:', e.message);
+            return null;
+        }
+        console.log('[AI] Alert:', alertData.title);
         const alert = {
             id: uuidv4(),
             roomId,

@@ -24,7 +24,7 @@ export default function Room() {
     connected, joinRoom, leaveRoom, sendMessage,
     messages, alerts, roomUsers, documents,
     setMessages, setDocuments, setAlerts,
-    newAlertCount, clearAlertCount, aiAnalyzing, aiStreamText
+    newAlertCount, clearAlertCount, aiAnalyzing, aiStreamText, lastAiResult
   } = useSocket();
 
   const [activeTab, setActiveTab] = useState<TabType>('chat');
@@ -191,6 +191,7 @@ export default function Room() {
                 roomId={roomId!}
                 aiAnalyzing={aiAnalyzing}
                 aiStreamText={aiStreamText}
+                lastAiResult={lastAiResult}
               />
             )}
             {activeTab === 'documents' && (

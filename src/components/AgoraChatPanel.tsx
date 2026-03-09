@@ -9,16 +9,17 @@ interface Props {
   roomId: string;
   aiAnalyzing?: boolean;
   aiStreamText?: string;
+  lastAiResult?: string;
 }
 
-export default function AgoraChatPanel({ messages, onSend, currentUser, aiAnalyzing, aiStreamText }: Props) {
+export default function AgoraChatPanel({ messages, onSend, currentUser, aiAnalyzing, aiStreamText, lastAiResult }: Props) {
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, aiAnalyzing, aiStreamText]);
+  }, [messages.length, aiAnalyzing, aiStreamText, lastAiResult]);
 
   const handleSend = () => {
     const trimmed = input.trim();
@@ -105,6 +106,18 @@ export default function AgoraChatPanel({ messages, onSend, currentUser, aiAnalyz
                 </div>
                 <div className="ai-bubble">
                   {aiStreamText || <span className="ai-cursor" />}
+                </div>
+              </div>
+            )}
+
+            {!aiAnalyzing && lastAiResult && (
+              <div className="ai-message fade-in">
+                <div className="ai-label">
+                  <Pulse size={12} weight="bold" />
+                  <span>Safety Monitor</span>
+                </div>
+                <div className="ai-bubble">
+                  {lastAiResult}
                 </div>
               </div>
             )}

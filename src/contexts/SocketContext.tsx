@@ -22,6 +22,7 @@ interface SocketContextType {
     clearAlertCount: () => void;
     aiAnalyzing: boolean;
     aiStreamText: string;
+    lastAiResult: string;
 }
 
 const SocketContext = createContext<SocketContextType | null>(null);
@@ -37,6 +38,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     const [newAlertCount, setNewAlertCount] = useState(0);
     const [aiAnalyzing, setAiAnalyzing] = useState(false);
     const [aiStreamText, setAiStreamText] = useState('');
+    const [lastAiResult, setLastAiResult] = useState('');
 
     useEffect(() => {
         if (!user) return;
@@ -68,9 +70,14 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
             if (data.type === 'start') {
                 setAiAnalyzing(true);
                 setAiStreamText('');
+                setLastAiResult('');
             } else if (data.type === 'chunk' && data.text) {
                 setAiStreamText(prev => prev + data.text);
             } else if (data.type === 'end') {
+                setAiStreamText(prev => {
+                    setLastAiResult(prev);
+                    return prev;
+                });
                 setAiAnalyzing(false);
             }
         });
@@ -120,6 +127,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
             clearAlertCount,
             aiAnalyzing,
             aiStreamText,
+            lastAiResult,
         }}>
             {children}
         </SocketContext.Provider>
