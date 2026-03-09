@@ -234,7 +234,7 @@ severity must be one of: critical, warning, info. The JSON must be on a single l
         }
 
         let fullText = '';
-        let hitDataDelimiter = false;
+        let emittedLen = 0;
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
 
@@ -253,21 +253,25 @@ severity must be one of: critical, warning, info. The JSON must be on a single l
                     const delta = parsed.choices?.[0]?.delta?.content;
                     if (delta) {
                         fullText += delta;
-                        // Only stream the human-readable part (before ---DATA---)
-                        if (!hitDataDelimiter) {
-                            if (fullText.includes('---DATA---')) {
-                                hitDataDelimiter = true;
-                                const visiblePart = delta.split('---DATA---')[0];
-                                if (visiblePart) {
-                                    io.to(roomId).emit('ai:stream', { type: 'chunk', text: visiblePart });
-                                }
-                            } else if (!fullText.trim().startsWith('SAFE')) {
-                                io.to(roomId).emit('ai:stream', { type: 'chunk', text: delta });
-                            }
-                        }
                     }
                 } catch {}
             }
+
+            // Stream only the safe-to-show portion
+            if (fullText.trim().startsWith('SAFE')) continue;
+            const dataIdx = fullText.indexOf('---DATA---');
+            const safeEnd = dataIdx !== -1 ? dataIdx : Math.max(0, fullText.length - 15);
+            if (safeEnd > emittedLen) {
+                io.to(roomId).emit('ai:stream', { type: 'chunk', text: fullText.slice(emittedLen, safeEnd) });
+                emittedLen = safeEnd;
+            }
+        }
+
+        // Flush any remaining safe text
+        const dataIdx = fullText.indexOf('---DATA---');
+        const finalEnd = dataIdx !== -1 ? dataIdx : fullText.length;
+        if (finalEnd > emittedLen) {
+            io.to(roomId).emit('ai:stream', { type: 'chunk', text: fullText.slice(emittedLen, finalEnd) });
         }
 
         io.to(roomId).emit('ai:stream', { type: 'end' });
