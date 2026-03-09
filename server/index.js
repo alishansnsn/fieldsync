@@ -194,7 +194,7 @@ ${documentContext}
 
 LATEST MESSAGE: "${triggerMessage}"
 
-Analyze the conversation for SAFETY CONTRADICTIONS or dangerous instructions that conflict with the reference documents. 
+Analyze the conversation for SAFETY CONTRADICTIONS or dangerous instructions that conflict with the reference documents.
 
 Rules:
 - Only flag genuine safety conflicts with specific values (voltages, pressures, temperatures, etc.)
@@ -202,14 +202,14 @@ Rules:
 - Only respond if there is a REAL contradiction
 - If no contradiction, respond with exactly: SAFE
 
-If contradiction found, respond with this JSON format:
-{
-  "severity": "critical" | "warning" | "info",
-  "title": "Brief conflict title",
-  "userStatement": "exact quote from conversation",
-  "documentStatement": "exact quote from document",
-  "recommendation": "specific corrective action"
-}`;
+If contradiction found, respond in EXACTLY this format (two sections separated by ---DATA---):
+
+First, write 2-3 sentences of plain-text analysis explaining the safety concern in a professional tone. Reference the specific values that conflict.
+
+---DATA---
+{"severity":"critical","title":"Brief conflict title","userStatement":"exact quote from conversation","documentStatement":"exact quote from document","recommendation":"specific corrective action"}
+
+severity must be one of: critical, warning, info. The JSON must be on a single line after ---DATA---.`;
 
     try {
         io.to(roomId).emit('ai:stream', { type: 'start' });
@@ -234,6 +234,7 @@ If contradiction found, respond with this JSON format:
         }
 
         let fullText = '';
+        let hitDataDelimiter = false;
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
 
@@ -252,7 +253,18 @@ If contradiction found, respond with this JSON format:
                     const delta = parsed.choices?.[0]?.delta?.content;
                     if (delta) {
                         fullText += delta;
-                        io.to(roomId).emit('ai:stream', { type: 'chunk', text: delta });
+                        // Only stream the human-readable part (before ---DATA---)
+                        if (!hitDataDelimiter) {
+                            if (fullText.includes('---DATA---')) {
+                                hitDataDelimiter = true;
+                                const visiblePart = delta.split('---DATA---')[0];
+                                if (visiblePart) {
+                                    io.to(roomId).emit('ai:stream', { type: 'chunk', text: visiblePart });
+                                }
+                            } else if (!fullText.trim().startsWith('SAFE')) {
+                                io.to(roomId).emit('ai:stream', { type: 'chunk', text: delta });
+                            }
+                        }
                     }
                 } catch {}
             }
@@ -261,9 +273,11 @@ If contradiction found, respond with this JSON format:
         io.to(roomId).emit('ai:stream', { type: 'end' });
 
         const text = fullText.trim();
-        if (text === 'SAFE' || text.includes('SAFE')) return null;
+        if (text === 'SAFE' || text.startsWith('SAFE')) return null;
 
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        const dataIdx = text.indexOf('---DATA---');
+        const jsonStr = dataIdx !== -1 ? text.slice(dataIdx + 10).trim() : text;
+        const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
         if (!jsonMatch) return null;
 
         const alertData = JSON.parse(jsonMatch[0]);
