@@ -1,0 +1,434 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ─── Linear Design System ─── */
+:root {
+  /* Backgrounds */
+  --bg-base: #0A0A0B;
+  --bg-raised: #141415;
+  --bg-overlay: #1C1C1F;
+  --bg-surface: #232328;
+  --bg-hover: rgba(255, 255, 255, 0.04);
+  --bg-active: rgba(255, 255, 255, 0.06);
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.09);
+  --border-focus: rgba(94, 106, 210, 0.5);
+
+  /* Text */
+  --text-primary: #EDEDEF;
+  --text-secondary: #8B8B8E;
+  --text-tertiary: #5C5C60;
+
+  /* Accent – Linear violet */
+  --accent: #5E6AD2;
+  --accent-hover: #6872D6;
+  --accent-muted: rgba(94, 106, 210, 0.15);
+  --accent-subtle: rgba(94, 106, 210, 0.08);
+
+  /* Status */
+  --danger: #E5484D;
+  --danger-muted: rgba(229, 72, 77, 0.15);
+  --danger-border: rgba(229, 72, 77, 0.25);
+  --warning: #F5A623;
+  --warning-muted: rgba(245, 166, 35, 0.12);
+  --warning-border: rgba(245, 166, 35, 0.2);
+  --success: #46A758;
+  --success-muted: rgba(70, 167, 88, 0.12);
+  --success-border: rgba(70, 167, 88, 0.2);
+  --info: #3B82F6;
+  --info-muted: rgba(59, 130, 246, 0.12);
+  --info-border: rgba(59, 130, 246, 0.2);
+
+  /* Roles */
+  --role-technician: #3B82F6;
+  --role-technician-muted: rgba(59, 130, 246, 0.12);
+  --role-supervisor: #8B5CF6;
+  --role-supervisor-muted: rgba(139, 92, 246, 0.12);
+  --role-admin: #F59E0B;
+  --role-admin-muted: rgba(245, 158, 11, 0.1);
+
+  /* Radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+
+  --header-height: 52px;
+}
+
+/* ─── Reset ─── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Outfit', -apple-system, system-ui, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Loading ─── */
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 14px;
+  color: var(--text-tertiary);
+  font-size: 0.8125rem;
+}
+
+.loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* ─── Typography ─── */
+h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+
+h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+p {
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* ─── Buttons ─── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-default);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn-danger {
+  background: var(--danger-muted);
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+
+.btn-danger:hover {
+  background: rgba(229, 72, 77, 0.22);
+}
+
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 0.75rem;
+}
+
+.btn-icon {
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.btn-icon.active {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.btn-icon.danger {
+  background: var(--danger-muted);
+  color: var(--danger);
+}
+
+/* ─── Card ─── */
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  transition: all 0.15s;
+}
+
+.card:hover {
+  border-color: var(--border-default);
+}
+
+/* ─── Badge ─── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: capitalize;
+}
+
+.badge-technician {
+  background: var(--role-technician-muted);
+  color: var(--role-technician);
+}
+
+.badge-supervisor {
+  background: var(--role-supervisor-muted);
+  color: var(--role-supervisor);
+}
+
+.badge-admin {
+  background: var(--role-admin-muted);
+  color: var(--role-admin);
+}
+
+/* ─── Status Dot ─── */
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  flex-shrink: 0;
+}
+
+.status-dot.offline {
+  background: var(--text-tertiary);
+}
+
+/* ─── Avatar ─── */
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.avatar-sm {
+  width: 26px;
+  height: 26px;
+  font-size: 0.625rem;
+}
+
+.avatar-md {
+  width: 32px;
+  height: 32px;
+}
+
+.avatar-lg {
+  width: 44px;
+  height: 44px;
+  font-size: 0.9375rem;
+}
+
+.avatar.technician {
+  background: var(--role-technician-muted);
+  color: var(--role-technician);
+}
+
+.avatar.supervisor {
+  background: var(--role-supervisor-muted);
+  color: var(--role-supervisor);
+}
+
+.avatar.admin {
+  background: var(--role-admin-muted);
+  color: var(--role-admin);
+}
+
+/* ─── Input ─── */
+.input {
+  width: 100%;
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+.input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* ─── Alert Components ─── */
+.alert-critical {
+  border-left: 2px solid var(--danger);
+  background: var(--danger-muted);
+}
+
+.alert-warning {
+  border-left: 2px solid var(--warning);
+  background: var(--warning-muted);
+}
+
+.alert-info {
+  border-left: 2px solid var(--info);
+  background: var(--info-muted);
+}
+
+/* ─── Animations ─── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease forwards;
+}
+
+.slide-in {
+  animation: slideIn 0.2s ease forwards;
+}
+
+/* ─── Mobile Global ─── */
+@media (max-width: 640px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    overflow-x: hidden;
+  }
+  .btn {
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 0.875rem;
+  }
+  .btn-sm {
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 0.8125rem;
+  }
+  .btn-icon {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px;
+  }
+  .input {
+    min-height: 44px;
+    font-size: 1rem;
+    padding: 10px 12px;
+  }
+  h2 {
+    font-size: 1.125rem;
+  }
+}
