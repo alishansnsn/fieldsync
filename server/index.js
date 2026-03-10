@@ -183,7 +183,11 @@ async function runAICheck(roomId, triggerMessage) {
     const roomMessages = db.messages.filter(m => m.roomId === roomId).slice(-20);
     const roomDocs = db.documents.filter(d => d.roomId === roomId);
 
-    if (roomDocs.length === 0) return null;
+    console.log('[AI] Docs in room:', roomDocs.length, '| Messages:', roomMessages.length);
+    if (roomDocs.length === 0) {
+        console.log('[AI] No docs — skipping');
+        return null;
+    }
 
     const conversationContext = roomMessages
         .map(m => `${m.senderName} (${new Date(m.timestamp).toLocaleTimeString()}): ${m.content}`)
@@ -217,8 +221,10 @@ ANALYSIS: [2-3 sentences explaining the safety concern with specific values]
 ALERT_JSON: {"severity":"critical","title":"Brief title","userStatement":"exact user quote","documentStatement":"exact doc quote","recommendation":"corrective action"}`;
 
     try {
+        console.log('[AI] Emitting ai:stream start');
         io.to(roomId).emit('ai:stream', { type: 'start' });
 
+        console.log('[AI] Calling streamText with model:', AI_MODEL);
         const result = streamText({
             model: openrouter(AI_MODEL),
             messages: [{ role: 'user', content: prompt }],
@@ -230,8 +236,10 @@ ALERT_JSON: {"severity":"critical","title":"Brief title","userStatement":"exact 
         let fullText = '';
         let emittedLen = 0;
 
+        console.log('[AI] Starting stream consumption...');
         for await (const chunk of result.textStream) {
             fullText += chunk;
+            if (fullText.length <= 50) console.log('[AI] First chunks:', JSON.stringify(fullText));
 
             // Don't stream SAFE responses
             if (fullText.trim().startsWith('SAFE')) continue;
@@ -252,6 +260,7 @@ ALERT_JSON: {"severity":"critical","title":"Brief title","userStatement":"exact 
             io.to(roomId).emit('ai:stream', { type: 'chunk', text: fullText.slice(emittedLen, finalEnd) });
         }
 
+        console.log('[AI] Stream done. Total length:', fullText.length);
         io.to(roomId).emit('ai:stream', { type: 'end' });
 
         const text = fullText.trim();
@@ -317,6 +326,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('message:send', async ({ roomId, content, sender }) => {
+        console.log('[MSG] Received:', { roomId, content, sender: sender?.name });
         const message = {
             id: uuidv4(),
             roomId,
@@ -328,16 +338,20 @@ io.on('connection', (socket) => {
             timestamp: new Date().toISOString(),
         };
         db.messages.push(message);
+        console.log('[MSG] Broadcasting message:new to room', roomId);
         io.to(roomId).emit('message:new', message);
 
+        console.log('[AI] Starting safety check...');
         try {
             const alert = await runAICheck(roomId, content);
             if (alert) {
+                console.log('[AI] Emitting safety:alert to room', roomId);
                 io.to(roomId).emit('safety:alert', alert);
-                console.log('Alert:', alert.alertData.title);
+            } else {
+                console.log('[AI] No alert generated');
             }
         } catch (e) {
-            console.error('AI check failed:', e);
+            console.error('[AI] Check failed:', e);
         }
     });
 
