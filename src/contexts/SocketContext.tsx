@@ -75,7 +75,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
                 setAiStreamText(prev => prev + data.text);
             } else if (data.type === 'end') {
                 setAiStreamText(prev => {
-                    setLastAiResult(prev);
+                    // Clean up any prefix like "ANALYSIS: " and trim
+                    const clean = prev.replace(/^ANALYSIS:\s*/i, '').trim();
+                    setLastAiResult(clean);
                     return prev;
                 });
                 setAiAnalyzing(false);

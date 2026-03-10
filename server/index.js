@@ -1,15 +1,27 @@
-require('dotenv').config();
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const cors = require('cors');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
+import 'dotenv/config';
+import express from 'express';
+import http from 'http';
+import { Server } from 'socket.io';
+import cors from 'cors';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
+import { fileURLToPath } from 'url';
+import { streamText } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || 'demo-key';
 const AI_MODEL = 'deepseek/deepseek-v3.2';
+
+const openrouter = createOpenAI({
+    baseURL: 'https://openrouter.ai/api/v1',
+    apiKey: OPENROUTER_API_KEY,
+});
 
 const app = express();
 const server = http.createServer(app);
@@ -21,14 +33,13 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Ensure uploads dir exists
 if (!fs.existsSync(path.join(__dirname, 'uploads'))) {
     fs.mkdirSync(path.join(__dirname, 'uploads'), { recursive: true });
 }
 
 const upload = multer({ dest: path.join(__dirname, 'uploads/') });
 
-/* ─── In-memory "DB" ─── */
+/* ─── In-memory DB ─── */
 const db = {
     users: [
         { id: 'u1', name: 'Alex Chen', email: 'technician@demo.com', password: 'demo123', role: 'technician', avatar: 'AC' },
@@ -108,9 +119,7 @@ app.post('/api/auth/login', (req, res) => {
     res.json({ token, user: { id: user.id, name: user.name, role: user.role, avatar: user.avatar, email: user.email } });
 });
 
-app.get('/api/rooms', auth, (req, res) => {
-    res.json(db.rooms);
-});
+app.get('/api/rooms', auth, (req, res) => res.json(db.rooms));
 
 app.post('/api/rooms', auth, (req, res) => {
     if (req.user.role === 'technician') return res.status(403).json({ error: 'Forbidden' });
@@ -141,12 +150,12 @@ app.post('/api/rooms/:id/documents', auth, upload.single('document'), async (req
         let extractedText = '';
         if (file.mimetype === 'application/pdf') {
             try {
-                const pdfParse = require('pdf-parse');
+                const pdfParse = (await import('pdf-parse')).default;
                 const dataBuffer = fs.readFileSync(file.path);
                 const pdfData = await pdfParse(dataBuffer);
                 extractedText = pdfData.text;
             } catch (e) {
-                extractedText = '[PDF text extraction failed — using filename as context]';
+                extractedText = '[PDF text extraction failed]';
             }
         }
 
@@ -169,21 +178,6 @@ app.post('/api/rooms/:id/documents', auth, upload.single('document'), async (req
     }
 });
 
-/* ─── AI SDK (lazy-loaded for CJS compat) ─── */
-let _ai = null;
-async function getAI() {
-    if (!_ai) {
-        const { streamText } = await import('ai');
-        const { createOpenAI } = await import('@ai-sdk/openai');
-        const openrouter = createOpenAI({
-            baseURL: 'https://openrouter.ai/api/v1',
-            apiKey: OPENROUTER_API_KEY,
-        });
-        _ai = { streamText, model: openrouter(AI_MODEL) };
-    }
-    return _ai;
-}
-
 /* ─── AI Safety Check ─── */
 async function runAICheck(roomId, triggerMessage) {
     const roomMessages = db.messages.filter(m => m.roomId === roomId).slice(-20);
@@ -196,7 +190,7 @@ async function runAICheck(roomId, triggerMessage) {
         .join('\n');
 
     const documentContext = roomDocs
-        .map(d => `=== ${d.name} ===\n${d.extractedText?.slice(0, 2000) || '(no text extracted)'}`)
+        .map(d => `=== ${d.name} ===\n${d.extractedText?.slice(0, 2000) || '(no text)'}`)
         .join('\n\n');
 
     const prompt = `You are an industrial safety AI monitoring a field technician collaboration session.
@@ -209,30 +203,24 @@ ${documentContext}
 
 LATEST MESSAGE: "${triggerMessage}"
 
-Analyze the conversation for SAFETY CONTRADICTIONS or dangerous instructions that conflict with the reference documents.
+Analyze for SAFETY CONTRADICTIONS between the conversation and reference documents.
 
 Rules:
 - Only flag genuine safety conflicts with specific values (voltages, pressures, temperatures, etc.)
-- Be very specific about what was said vs what the document states
-- Only respond if there is a REAL contradiction
+- Be specific about what was said vs what the document states
 - If no contradiction, respond with exactly: SAFE
 
-If contradiction found, respond in EXACTLY this format (two sections separated by ---DATA---):
+If contradiction found, respond in this format:
 
-First, write 2-3 sentences of plain-text analysis explaining the safety concern in a professional tone. Reference the specific values that conflict.
+ANALYSIS: [2-3 sentences explaining the safety concern with specific values]
 
----DATA---
-{"severity":"critical","title":"Brief conflict title","userStatement":"exact quote from conversation","documentStatement":"exact quote from document","recommendation":"specific corrective action"}
-
-severity must be one of: critical, warning, info. The JSON must be on a single line after ---DATA---.`;
+ALERT_JSON: {"severity":"critical","title":"Brief title","userStatement":"exact user quote","documentStatement":"exact doc quote","recommendation":"corrective action"}`;
 
     try {
-        const { streamText, model } = await getAI();
-
         io.to(roomId).emit('ai:stream', { type: 'start' });
 
         const result = streamText({
-            model,
+            model: openrouter(AI_MODEL),
             messages: [{ role: 'user', content: prompt }],
             onError({ error }) {
                 console.error('[AI] Stream error:', error);
@@ -245,21 +233,21 @@ severity must be one of: critical, warning, info. The JSON must be on a single l
         for await (const chunk of result.textStream) {
             fullText += chunk;
 
-            // Don't stream "SAFE" responses
+            // Don't stream SAFE responses
             if (fullText.trim().startsWith('SAFE')) continue;
 
-            // Buffer 15 chars to prevent ---DATA--- delimiter from leaking
-            const dataIdx = fullText.indexOf('---DATA---');
-            const safeEnd = dataIdx !== -1 ? dataIdx : Math.max(0, fullText.length - 15);
+            // Buffer to prevent ALERT_JSON from leaking into visible stream
+            const jsonIdx = fullText.indexOf('ALERT_JSON:');
+            const safeEnd = jsonIdx !== -1 ? jsonIdx : Math.max(0, fullText.length - 15);
             if (safeEnd > emittedLen) {
                 io.to(roomId).emit('ai:stream', { type: 'chunk', text: fullText.slice(emittedLen, safeEnd) });
                 emittedLen = safeEnd;
             }
         }
 
-        // Flush remaining safe text
-        const delimIdx = fullText.indexOf('---DATA---');
-        const finalEnd = delimIdx !== -1 ? delimIdx : fullText.length;
+        // Flush remaining visible text
+        const jsonIdx = fullText.indexOf('ALERT_JSON:');
+        const finalEnd = jsonIdx !== -1 ? jsonIdx : fullText.length;
         if (finalEnd > emittedLen) {
             io.to(roomId).emit('ai:stream', { type: 'chunk', text: fullText.slice(emittedLen, finalEnd) });
         }
@@ -267,18 +255,19 @@ severity must be one of: critical, warning, info. The JSON must be on a single l
         io.to(roomId).emit('ai:stream', { type: 'end' });
 
         const text = fullText.trim();
-        console.log('[AI RAW]', text.slice(0, 300));
+        console.log('[AI RAW]', text.slice(0, 500));
 
         if (text === 'SAFE' || text.startsWith('SAFE')) {
-            console.log('[AI] Safe — no alert');
+            console.log('[AI] Safe');
             return null;
         }
 
-        const dataIdx = text.indexOf('---DATA---');
-        const jsonStr = dataIdx !== -1 ? text.slice(dataIdx + 10).trim() : text;
+        // Extract JSON after ALERT_JSON: marker
+        const alertIdx = text.indexOf('ALERT_JSON:');
+        const jsonStr = alertIdx !== -1 ? text.slice(alertIdx + 11).trim() : text;
         const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
-            console.log('[AI] No JSON found');
+            console.log('[AI] No JSON found in:', jsonStr.slice(0, 100));
             return null;
         }
 
@@ -289,6 +278,7 @@ severity must be one of: critical, warning, info. The JSON must be on a single l
             console.log('[AI] JSON parse failed:', e.message);
             return null;
         }
+
         console.log('[AI] Alert:', alertData.title);
         const alert = {
             id: uuidv4(),
@@ -300,7 +290,7 @@ severity must be one of: critical, warning, info. The JSON must be on a single l
         db.safetyAlerts.push(alert);
         return alert;
     } catch (err) {
-        console.error('AI check error:', err);
+        console.error('[AI] Check error:', err);
         io.to(roomId).emit('ai:stream', { type: 'end' });
         return null;
     }
@@ -323,7 +313,7 @@ io.on('connection', (socket) => {
 
         io.to(roomId).emit('room:users', roomUsers[roomId]);
         socket.to(roomId).emit('user:joined', user);
-        console.log(`${user.name} joined room ${roomId}`);
+        console.log(`${user.name} joined ${roomId}`);
     });
 
     socket.on('message:send', async ({ roomId, content, sender }) => {
@@ -340,12 +330,11 @@ io.on('connection', (socket) => {
         db.messages.push(message);
         io.to(roomId).emit('message:new', message);
 
-        // Trigger AI safety check (streams via ai:stream events)
         try {
             const alert = await runAICheck(roomId, content);
             if (alert) {
                 io.to(roomId).emit('safety:alert', alert);
-                console.log('Safety alert triggered:', alert.alertData.title);
+                console.log('Alert:', alert.alertData.title);
             }
         } catch (e) {
             console.error('AI check failed:', e);
@@ -380,7 +369,6 @@ if (fs.existsSync(frontendPath)) {
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-    console.log(`\n🏭 FieldSync Server running on port ${PORT}`);
-    console.log(`📡 WebSocket ready`);
-    console.log(`🤖 OpenRouter AI Safety Orchestrator active\n`);
+    console.log(`\nFieldSync running on port ${PORT}`);
+    console.log(`AI: ${AI_MODEL} via OpenRouter\n`);
 });
