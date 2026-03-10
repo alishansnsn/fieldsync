@@ -12,7 +12,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@openrouter/sdk": "^0.9.11",
+    "@ai-sdk/openai": "^3.0.41",
+    "ai": "^6.0.116",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",

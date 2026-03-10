@@ -169,6 +169,21 @@ app.post('/api/rooms/:id/documents', auth, upload.single('document'), async (req
     }
 });
 
+/* ─── AI SDK (lazy-loaded for CJS compat) ─── */
+let _ai = null;
+async function getAI() {
+    if (!_ai) {
+        const { streamText } = await import('ai');
+        const { createOpenAI } = await import('@ai-sdk/openai');
+        const openrouter = createOpenAI({
+            baseURL: 'https://openrouter.ai/api/v1',
+            apiKey: OPENROUTER_API_KEY,
+        });
+        _ai = { streamText, model: openrouter(AI_MODEL) };
+    }
+    return _ai;
+}
+
 /* ─── AI Safety Check ─── */
 async function runAICheck(roomId, triggerMessage) {
     const roomMessages = db.messages.filter(m => m.roomId === roomId).slice(-20);
@@ -212,53 +227,28 @@ First, write 2-3 sentences of plain-text analysis explaining the safety concern 
 severity must be one of: critical, warning, info. The JSON must be on a single line after ---DATA---.`;
 
     try {
+        const { streamText, model } = await getAI();
+
         io.to(roomId).emit('ai:stream', { type: 'start' });
 
-        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-                'Content-Type': 'application/json',
+        const result = streamText({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            onError({ error }) {
+                console.error('[AI] Stream error:', error);
             },
-            body: JSON.stringify({
-                model: AI_MODEL,
-                messages: [{ role: 'user', content: prompt }],
-                stream: true,
-            }),
         });
-
-        if (!res.ok) {
-            console.error('AI API error:', res.status);
-            io.to(roomId).emit('ai:stream', { type: 'end' });
-            return null;
-        }
 
         let fullText = '';
         let emittedLen = 0;
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+        for await (const chunk of result.textStream) {
+            fullText += chunk;
 
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split('\n').filter(l => l.startsWith('data: '));
-
-            for (const line of lines) {
-                const data = line.slice(6);
-                if (data === '[DONE]') continue;
-                try {
-                    const parsed = JSON.parse(data);
-                    const delta = parsed.choices?.[0]?.delta?.content;
-                    if (delta) {
-                        fullText += delta;
-                    }
-                } catch {}
-            }
-
-            // Stream only the safe-to-show portion
+            // Don't stream "SAFE" responses
             if (fullText.trim().startsWith('SAFE')) continue;
+
+            // Buffer 15 chars to prevent ---DATA--- delimiter from leaking
             const dataIdx = fullText.indexOf('---DATA---');
             const safeEnd = dataIdx !== -1 ? dataIdx : Math.max(0, fullText.length - 15);
             if (safeEnd > emittedLen) {
@@ -267,9 +257,9 @@ severity must be one of: critical, warning, info. The JSON must be on a single l
             }
         }
 
-        // Flush any remaining safe text
-        const dataIdx = fullText.indexOf('---DATA---');
-        const finalEnd = dataIdx !== -1 ? dataIdx : fullText.length;
+        // Flush remaining safe text
+        const delimIdx = fullText.indexOf('---DATA---');
+        const finalEnd = delimIdx !== -1 ? delimIdx : fullText.length;
         if (finalEnd > emittedLen) {
             io.to(roomId).emit('ai:stream', { type: 'chunk', text: fullText.slice(emittedLen, finalEnd) });
         }
@@ -277,7 +267,7 @@ severity must be one of: critical, warning, info. The JSON must be on a single l
         io.to(roomId).emit('ai:stream', { type: 'end' });
 
         const text = fullText.trim();
-        console.log('[AI RAW]', text);
+        console.log('[AI RAW]', text.slice(0, 300));
 
         if (text === 'SAFE' || text.startsWith('SAFE')) {
             console.log('[AI] Safe — no alert');
@@ -286,10 +276,9 @@ severity must be one of: critical, warning, info. The JSON must be on a single l
 
         const dataIdx = text.indexOf('---DATA---');
         const jsonStr = dataIdx !== -1 ? text.slice(dataIdx + 10).trim() : text;
-        console.log('[AI JSON str]', jsonStr.slice(0, 200));
         const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
-            console.log('[AI] No JSON found in response');
+            console.log('[AI] No JSON found');
             return null;
         }
 
